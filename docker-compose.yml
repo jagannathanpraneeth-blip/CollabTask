@@ -1,0 +1,70 @@
+version: '3.9'
+
+services:
+  mongodb:
+    image: mongo:6.0
+    container_name: collabtask_mongodb
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: collabtask
+    networks:
+      - collabtask_network
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'mongo', '--eval', 'db.adminCommand("ping")']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: collabtask_backend
+    ports:
+      - '5000:5000'
+    environment:
+      NODE_ENV: production
+      MONGODB_URI: mongodb://mongodb:27017/collabtask
+      JWT_SECRET: ${JWT_SECRET:-your_jwt_secret_key_change_in_production}
+      CORS_ORIGIN: http://localhost:3000
+      PORT: 5000
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - collabtask_network
+    restart: unless-stopped
+    volumes:
+      - ./:/app
+      - /app/node_modules
+
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: collabtask_frontend
+    ports:
+      - '3000:3000'
+    environment:
+      REACT_APP_API_URL: http://localhost:5000
+      REACT_APP_SOCKET_URL: http://localhost:5000
+    depends_on:
+      - backend
+    networks:
+      - collabtask_network
+    restart: unless-stopped
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  collabtask_network:
+    driver: bridge
